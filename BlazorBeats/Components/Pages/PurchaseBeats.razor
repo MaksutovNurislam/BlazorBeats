@@ -1,0 +1,322 @@
+﻿@page "/purchase/{BeatId:int?}"
+@inject BeatService BeatService
+@inject OrderService OrderService
+@inject ProfileService ProfileService
+@inject UserSession UserSession
+@using BlazorBeats.Components.Data.Models
+
+<style>
+    .dashboard {
+        display: flex;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+    }
+
+    .sidebar {
+        width: 200px;
+        background-color: #222;
+        color: white;
+        padding: 1rem;
+    }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 1rem;
+        }
+
+        .sidebar a, .sidebar button {
+            color: white;
+            text-decoration: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 0;
+        }
+
+            .sidebar button:hover, .sidebar a:hover {
+                color: #00aced;
+            }
+
+    .content {
+        flex-grow: 1;
+        padding: 1rem;
+        background: #f0f0f0;
+        overflow-y: auto;
+    }
+
+    .balance-info {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        background: #fff;
+        padding: 0.5rem;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .compact-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .compact-card {
+        background: white;
+        padding: 0.75rem;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        font-size: 0.9rem;
+    }
+
+        .compact-card img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+    .beat-title {
+        font-weight: 600;
+        margin-top: 0.5rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .beat-meta {
+        display: flex;
+        gap: 0.5rem;
+        color: #666;
+        margin: 0.25rem 0;
+        font-size: 0.8rem;
+    }
+
+    .audio-player {
+        width: 100%;
+        margin: 0.5rem 0;
+        height: 30px;
+    }
+
+    .license-select {
+        width: 100%;
+        padding: 0.35rem;
+        font-size: 0.85rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin: 0.25rem 0;
+    }
+
+    .purchase-btn {
+        width: 100%;
+        padding: 0.5rem;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        margin-top: 0.5rem;
+    }
+
+        .purchase-btn:hover {
+            background: #0069d9;
+        }
+
+    /* Модальное окно стили */
+    .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 8px;
+        width: 350px;
+        max-width: 90vw;
+        padding: 1rem;
+    }
+
+    .modal-btn {
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .modal-btn-close {
+        background-color: #f1f1f1;
+        color: #333;
+        border: 1px solid #ddd;
+    }
+
+        .modal-btn-close:hover {
+            background-color: #e0e0e0;
+        }
+
+    .modal-btn-purchases {
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+    }
+
+        .modal-btn-purchases:hover {
+            background-color: #3e8e41;
+        }
+</style>
+
+<h2 class="text-xl font-bold mb-3">Купить биты</h2>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <p class="text-red-500 text-sm">Пожалуйста, войдите в систему, чтобы покупать биты.</p>
+}
+else if (beats == null)
+{
+    <p class="text-sm">Загрузка битов...</p>
+}
+else
+{
+    <div class="balance-info">
+        <strong>Ваш баланс:</strong> $@userProfile?.Balance.ToString("0.00")
+    </div>
+
+    <div class="compact-grid">
+        @foreach (var beat in beats)
+        {
+            <div class="compact-card">
+                <img src="@beat.ImagePath" alt="@beat.Title" />
+                <div class="beat-title">@beat.Title</div>
+                <div class="beat-meta">
+                    <span>@beat.Genre</span>
+                    <span>•</span>
+                    <span>@beat.Bpm BPM</span>
+                </div>
+                <audio controls src="@beat.FileUrl" class="audio-player"></audio>
+
+                <select @onchange="@((e) => SelectLicense(beat.Id, e.Value?.ToString()))" class="license-select">
+                    <option disabled selected>Выберите лицензию</option>
+                    @foreach (var bl in beat.BeatLicenses)
+                    {
+                        <option value="@bl.License.Id">@bl.License.Type - $@bl.License.Price.ToString("0.00")</option>
+                    }
+                </select>
+
+                @if (selectedLicense.TryGetValue(beat.Id, out var licenseId))
+                {
+                    <button class="purchase-btn" @onclick="() => PurchaseAsync(beat.Id, licenseId)">
+                        Купить
+                    </button>
+                }
+
+                @if (purchaseStatus.TryGetValue(beat.Id, out var status))
+                {
+                    <div class="text-xs mt-1 @(status.Success ? "text-green-600" : "text-red-600")">
+                        @status.Message
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="text-lg font-medium mb-2">@modalTitle</div>
+            <div class="mb-4">@modalMessage</div>
+            <div class="flex justify-end gap-2">
+                <button class="modal-btn modal-btn-close" @onclick="CloseModal">
+                    Закрыть
+                </button>
+                @if (modalSuccess)
+                {
+                    <a href="/my-purchases" class="modal-btn modal-btn-purchases">
+                        Мои покупки
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int? BeatId { get; set; }
+
+    private List<Beat>? beats;
+    private Profile? userProfile;
+
+    private Dictionary<int, int> selectedLicense = new();
+    private Dictionary<int, (bool Success, string Message)> purchaseStatus = new();
+
+    private bool showModal = false;
+    private string modalTitle = string.Empty;
+    private string modalMessage = string.Empty;
+    private bool modalSuccess = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserSession.IsAuthenticated)
+    {
+            var allBeats = await BeatService.GetAllBeatsAsync();
+            userProfile = await ProfileService.GetProfileByUserIdAsync(UserSession.CurrentUser!.Id);
+
+            if (BeatId.HasValue)
+            {
+                beats = allBeats.Where(b => b.Id == BeatId.Value).ToList();
+            }
+            else
+            {
+                beats = allBeats;
+            }
+        }
+    }
+
+    void SelectLicense(int beatId, string? value)
+    {
+        if (int.TryParse(value, out var licenseId))
+        {
+            selectedLicense[beatId] = licenseId;
+        }
+    }
+
+    async Task PurchaseAsync(int beatId, int licenseId)
+    {
+        var result = await OrderService.PurchaseBeatAsync(UserSession.CurrentUser!.Id, beatId, licenseId);
+        if (result)
+        {
+            modalTitle = "Успешная покупка";
+            modalMessage = "Вы успешно купили бит!";
+            modalSuccess = true;
+        }
+        else
+        {
+            modalTitle = "Ошибка покупки";
+            modalMessage = "Ошибка при покупке. Возможно, недостаточно средств.";
+            modalSuccess = false;
+        }
+        showModal = true;
+    }
+
+    void CloseModal()
+    {
+        showModal = false;
+    }
+}

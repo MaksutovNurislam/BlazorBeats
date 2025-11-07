@@ -1,0 +1,107 @@
+﻿@page "/my-purchases"
+@using BlazorBeats.Models
+@inject OrderService OrderService
+@inject UserSession UserSession
+
+<style>
+    .beats-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+
+    .beat-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        cursor: pointer;
+        transition: box-shadow 0.3s ease;
+    }
+
+        .beat-card:hover {
+            box-shadow: 0 0 12px rgba(0,0,0,0.25);
+        }
+
+    .download-button {
+        display: inline-block;
+        background-color: #4CAF50; /* Зеленый цвет */
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        text-align: center;
+        text-decoration: none;
+        font-size: 0.875rem; /* Размер шрифта */
+        transition: background-color 0.3s ease;
+    }
+
+        .download-button:hover {
+            background-color: #45a049; /* Темнее при наведении */
+        }
+
+    .no-file {
+        color: #f44336; /* Красный цвет для текста "Нет файла" */
+        font-size: 0.875rem; /* Размер шрифта */
+    }
+</style>
+
+<h2 class="text-xl font-bold mb-4">Мои покупки</h2>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <p class="text-red-600">Пожалуйста, авторизуйтесь для просмотра покупок.</p>
+}
+else if (orders == null)
+{
+    <p>Загрузка...</p>
+}
+else if (orders.Count == 0)
+{
+    <p>Вы еще не совершили покупок.</p>
+}
+else
+{
+    <div class="beats-list">
+        @foreach (var order in orders)
+        {
+            var beat = order.Beat;
+            var licenseType = order.License.Type.ToLower();
+            string? downloadUrl = licenseType.Contains("mp3") ? beat.UntaggedMp3Url
+            : licenseType.Contains("wav") ? beat.UntaggedWavUrl
+            : null;
+
+            <div class="beat-card">
+                <img src="@beat.ImagePath" alt="@beat.Title" style="width: 100%; height: 120px; object-fit: cover; border-radius: 6px;" />
+                <h3>@beat.Title</h3>
+                <p><strong>Лицензия:</strong> @order.License.Type</p>
+                <p><strong>Цена:</strong> $@order.License.Price</p>
+                <p><strong>Дата:</strong> @order.CreatedAt.ToShortDateString()</p>
+
+                <div>
+                    @if (!string.IsNullOrEmpty(downloadUrl))
+                    {
+                        <a href="@downloadUrl" download class="download-button">
+                            Скачать
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="no-file">Нет файла</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Order>? orders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserSession.IsAuthenticated)
+    {
+            orders = await OrderService.GetOrdersByBuyerIdAsync(UserSession.CurrentUser!.Id);
+        }
+    }
+}

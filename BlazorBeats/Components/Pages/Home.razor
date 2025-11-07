@@ -1,0 +1,64 @@
+﻿@page "/"
+@using BlazorBeats.Components.Layout
+@layout EmptyLayout
+
+<style>
+    body, html {
+        height: 100%;
+        margin: 0;
+    }
+
+    .container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        text-align: center;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    h1 {
+        margin-bottom: 30px;
+        color: #2c3e50;
+    }
+
+    .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        width: 220px; /* фиксированная ширина блока кнопок */
+    }
+
+    button {
+        width: 100%;
+        background-color: #3498db;
+        border: none;
+        color: white;
+        padding: 12px 0;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s ease;
+    }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+</style>
+
+<div class="container">
+    <h1>Добро пожаловать на nikolayaleksandrovich.store</h1>
+
+    <div class="btn-group">
+        <button @onclick="NavigateToRegister">Зарегистрироваться</button>
+        <button @onclick="NavigateToLogin">Войти</button>
+    </div>
+</div>
+
+@code {
+    [Inject] NavigationManager Nav { get; set; }
+
+    private void NavigateToRegister() => Nav.NavigateTo("/register");
+    private void NavigateToLogin() => Nav.NavigateTo("/login");
+}

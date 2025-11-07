@@ -1,0 +1,106 @@
+﻿@page "/testpage"
+@inject AppDbContext _context
+@using Models = BlazorBeats.Components.Data.Models
+@inject ProfileService ProfileService
+@inject UserSession UserSession
+
+
+
+<style>
+    .license-card {
+        border: 1px solid #ccc;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: #f9f9f9;
+    }
+
+        .license-card h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .license-card p {
+            margin: 8px 0;
+            color: #555;
+        }
+</style>
+
+
+<h2 class="profile-title">Мои лицензии</h2>
+
+@if (licenses == null)
+{
+    <p class="loading-text">Загрузка лицензий...</p>
+}
+else if (licenses.Count == 0)
+{
+    <p class="loading-text">У вас пока нет лицензий.</p>
+}
+else
+{
+    <div class="profile-container">
+        @foreach (var license in licenses)
+        {
+            <div class="license-card">
+                <h3>@license.Type лицензия</h3>
+                <p>@license.Description</p>
+                <p><strong>Цена:</strong> $@license.Price</p>
+                <button class="action-button" @onclick="() => OpenEditModal(license)">Изменить цену</button>
+            </div>
+        }
+    </div>
+}
+
+@if (showModal && selectedLicense != null)
+{
+    <div class="modal-backdrop">
+        <div class="modal-content">
+            <h3>Редактировать цену</h3>
+            <p><strong>Тип:</strong> @selectedLicense.Type</p>
+            <p>@selectedLicense.Description</p>
+
+            <div class="form-group">
+                <label>Новая цена</label>
+                <input type="number" step="0.01" @bind="editPrice" class="form-control" />
+            </div>
+
+            <button class="save-button" @onclick="SavePrice">Сохранить</button>
+            <button class="action-button" @onclick="() => showModal = false">Отмена</button>
+        </div>
+    </div>
+}
+
+@code {
+    private List<License>? licenses;
+    private bool showModal = false;
+    private License? selectedLicense;
+    private float editPrice;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Здесь подставь ID текущего пользователя
+        int currentUserId = UserSession.CurrentUser!.Id;
+        licenses = await _context.Licenses
+            .Where(l => l.UserId == currentUserId)
+            .ToListAsync();
+    }
+
+    private void OpenEditModal(License license)
+    {
+        selectedLicense = license;
+        editPrice = license.Price;
+        showModal = true;
+    }
+
+    private async Task SavePrice()
+    {
+        if (selectedLicense != null)
+        {
+            selectedLicense.Price = editPrice;
+            await _context.SaveChangesAsync();
+
+            showModal = false;
+        }
+    }
+}

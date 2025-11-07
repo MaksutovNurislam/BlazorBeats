@@ -1,0 +1,377 @@
+﻿@page "/upload-beat"
+@using BlazorBeats.Services
+@using BlazorBeats.Components.Data.Models
+@inject BeatService BeatService
+@inject NavigationManager Navigation
+@inject UserSession Session
+@inject IJSRuntime JS
+@implements IDisposable
+@using Microsoft.EntityFrameworkCore
+
+<style>
+    .form-container {
+        max-width: 320px;
+        margin: 2rem auto; /* центр по горизонтали с отступом сверху и снизу */
+        padding: 1rem;
+        background: #f9f9f9;
+        border-radius: 12px;
+        box-shadow: 0 3px 8px rgb(0 0 0 / 0.1);
+    }
+
+    form div {
+        margin-bottom: 1rem;
+        width: 100%; /* поля будут занимать всю ширину контейнера */
+    }
+
+    label {
+        font-weight: 500;
+        display: block;
+        margin-bottom: 0.3rem;
+        color: #444;
+        font-size: 0.9rem;
+    }
+
+    input.form-control,
+    select.form-control {
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        padding: 0.25rem 0.4rem;
+        font-size: 0.9rem;
+        width: 100%;
+        box-sizing: border-box;
+        transition: border-color 0.3s;
+    }
+
+        input.form-control:focus,
+        select.form-control:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+        }
+
+    button.btn-primary {
+        background-color: #007bff;
+        border-color: #007bff;
+        padding: 0.4rem 1rem;
+        font-size: 1rem;
+        border-radius: 8px;
+        transition: background-color 0.3s;
+        width: 100%;
+        max-width: 320px;
+        display: block;
+        margin: 0 auto;
+    }
+</style>
+
+<div class="form-container">
+    <h3 style="text-align: center;">Загрузить бит</h3>
+
+    <EditForm Model="@beatModel" OnValidSubmit="HandleUpload">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div>
+            <label>Название:</label>
+            <InputText @bind-Value="beatModel.Title" class="form-control" />
+        </div>
+
+        <div>
+            <label>Жанр:</label>
+            <InputSelect @bind-Value="beatModel.Genre" class="form-control">
+                <option disabled value="">-- Выберите жанр --</option>
+                @foreach (var genre in genres)
+                {
+                    <option value="@genre">@genre</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div>
+            <label>BPM:</label>
+            <InputText @bind-Value="beatModel.Bpm" class="form-control" />
+        </div>
+
+        <div>
+            <label>Ключ:</label>
+            <InputSelect @bind-Value="beatModel.Key" class="form-control">
+                <option disabled value="">-- Выберите ключ --</option>
+                @foreach (var key in keys)
+                {
+                    <option value="@key">@key</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div>
+            <label>Файл бита (mp3 с тегами):</label>
+            <InputFile OnChange="HandleFileChange" />
+        </div>
+        <div>
+            <label>MP3 без тегов (для продажи):</label>
+            <InputFile OnChange="HandleUntaggedMp3Change" />
+        </div>
+        <div>
+            <label>WAV без тегов (для продажи):</label>
+            <InputFile OnChange="HandleUntaggedWavChange" />
+        </div>
+        <div>
+            <label>Обложка:</label>
+            <InputFile id="coverInput" OnChange="HandleCoverChange" class="form-control" />
+        </div>
+
+        <button class="btn btn-primary mt-2" type="submit">Загрузить</button>
+    </EditForm>
+</div>
+
+@if (uploadedBeats.Count > 0)
+{
+    <h4 class="mt-4">Каталог ваших битов</h4>
+    <div class="row">
+        @foreach (var beat in uploadedBeats)
+        {
+            <div class="col-sm-6 col-md-4 col-lg-3">
+                <div class="card mb-3 shadow-sm" style="border-radius: 10px;">
+                    <img src="@beat.ImagePath" class="card-img-top" style="height: 150px; object-fit: cover;" />
+                    <div class="card-body p-2">
+                        <h6 class="card-title mb-1 text-truncate">@beat.Title</h6>
+                       
+                        <button class="btn btn-sm btn-outline-primary w-100" @onclick="() => OpenBeatModal(beat)">Посмотреть</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (selectedBeat != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-md">
+            <div class="modal-content" style="border-radius: 12px;">
+                <div class="modal-header py-2 px-3">
+                    <h5 class="modal-title">@selectedBeat.Title</h5>
+                    <button type="button" class="btn-close" @onclick="CloseBeatModal"></button>
+                </div>
+                <div class="modal-body px-3 py-2">
+                    <img src="@selectedBeat.ImagePath" class="img-fluid mb-2" style="border-radius: 8px;" />
+                    @if (isEditing)
+                    {
+                        <div class="mb-2"><label>Название:</label><InputText @bind-Value="selectedBeat.Title" class="form-control" /></div>
+                        <div class="mb-2">
+                            <label>Жанр:</label>
+                            <InputSelect @bind-Value="selectedBeat.Genre" class="form-control">
+                                @foreach (var genre in genres)
+                                {
+                                    <option value="@genre">@genre</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="mb-2"><label>BPM:</label><InputText @bind-Value="selectedBeat.Bpm" class="form-control" /></div>
+                        <div class="mb-2">
+                            <label>Ключ:</label>
+                            <InputSelect @bind-Value="selectedBeat.Key" class="form-control">
+                                @foreach (var key in keys)
+                                {
+                                    <option value="@key">@key</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="mb-1"><strong>Жанр:</strong> @selectedBeat.Genre</p>
+                        <p class="mb-1"><strong>BPM:</strong> @selectedBeat.Bpm</p>
+                        <p class="mb-2"><strong>Ключ:</strong> @selectedBeat.Key</p>
+                    }
+                    <audio controls class="w-100">
+                        <source src="@selectedBeat.FileUrl" type="audio/mpeg" />
+                        Ваш браузер не поддерживает аудиоплеер.
+                    </audio>
+                </div>
+                <div class="modal-footer px-3 py-2">
+                    @if (isEditing)
+                    {
+                        <button class="btn btn-sm btn-success" @onclick="SaveEditedBeat">Сохранить</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="CancelEditing">Отмена</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-danger" @onclick="DeleteSelectedBeat">Удалить</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="EnableEditing">Редактировать</button>
+                        <button class="btn btn-sm btn-outline-dark" @onclick="CloseBeatModal">Закрыть</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Beat beatModel = new();
+    private IBrowserFile? uploadedFile;           // mp3 tagged (для прослушивания)
+    private IBrowserFile? uploadedMp3Untagged;    // mp3 без тегов (только для покупки)
+    private IBrowserFile? uploadedWavUntagged;    // wav без тегов (только для покупки)
+    private IBrowserFile? uploadedCover;
+    private List<Beat> uploadedBeats = new();
+    private Beat? selectedBeat;
+    private bool isEditing = false;
+
+    private DotNetObjectReference<UploadBeat>? dotNetRef;
+    private bool isCoverSquare = false;
+
+    private readonly string[] genres = new[] { "Trap", "Boom Bap", "Drill", "RnB", "Lo-fi", "Pop", "EDM" };
+    private readonly string[] keys = new[] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.CurrentUser is not null)
+        {
+            uploadedBeats = await BeatService.GetBeatsByUserIdAsync(Session.CurrentUser.Id);
+        }
+        dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    [JSInvokable]
+    public async Task ReceiveImageCheckResult(bool isSquare)
+    {
+        if (!isSquare)
+        {
+            isCoverSquare = false;
+            await JS.InvokeVoidAsync("alert", "Пожалуйста, загрузите квадратную обложку (1:1).");
+        }
+        else
+        {
+            isCoverSquare = true;
+        }
+    }
+
+    private async Task HandleFileChange(InputFileChangeEventArgs e)
+    {
+        uploadedFile = e.File;
+    }
+
+    private async Task HandleUntaggedMp3Change(InputFileChangeEventArgs e)
+    {
+        uploadedMp3Untagged = e.File;
+    }
+
+    private async Task HandleUntaggedWavChange(InputFileChangeEventArgs e)
+    {
+        uploadedWavUntagged = e.File;
+    }
+
+    private async Task HandleCoverChange(InputFileChangeEventArgs e)
+    {
+        uploadedCover = e.File;
+        await JS.InvokeVoidAsync("checkImageIsSquare", "coverInput", dotNetRef);
+    }
+
+    private async Task HandleUpload()
+    {
+        if (uploadedFile is null || Session.CurrentUser is null)
+            return;
+
+        if (uploadedCover != null && !isCoverSquare)
+        {
+            await JS.InvokeVoidAsync("alert", "Вы не можете загрузить не квадратную обложку.");
+            return;
+        }
+
+        int userId = Session.CurrentUser.Id;
+
+        bool success = await BeatService.UploadBeatAsync(
+            beatModel,
+            uploadedFile,
+            uploadedCover,
+            userId,
+            uploadedMp3Untagged,
+            uploadedWavUntagged);
+
+        if (success)
+        {
+            beatModel = new();
+            uploadedFile = null;
+            uploadedCover = null;
+            uploadedMp3Untagged = null;
+            uploadedWavUntagged = null;
+            isCoverSquare = false;
+            uploadedBeats = await BeatService.GetBeatsByUserIdAsync(userId);
+        }
+    }
+
+    private void OpenBeatModal(Beat beat)
+    {
+        selectedBeat = new Beat
+            {
+                Id = beat.Id,
+                Title = beat.Title,
+                Genre = beat.Genre,
+                Price = beat.Price,
+                Bpm = beat.Bpm,
+                Key = beat.Key,
+                ImagePath = beat.ImagePath,
+                FileUrl = beat.FileUrl
+            };
+        isEditing = false;
+    }
+
+    private void CloseBeatModal()
+    {
+        selectedBeat = null;
+        isEditing = false;
+    }
+
+    private void EnableEditing()
+    {
+        isEditing = true;
+    }
+
+    private async Task SaveEditedBeat()
+    {
+        if (selectedBeat is not null)
+        {
+            await BeatService.UpdateBeatAsync(selectedBeat);
+            uploadedBeats = await BeatService.GetBeatsByUserIdAsync(Session.CurrentUser!.Id);
+            isEditing = false;
+        }
+    }
+
+    private void CancelEditing()
+    {
+        isEditing = false;
+        if (selectedBeat != null)
+        {
+            // Обновляем данные из списка, чтобы сбросить изменения
+            var original = uploadedBeats.FirstOrDefault(b => b.Id == selectedBeat.Id);
+            if (original != null)
+            {
+                selectedBeat.Title = original.Title;
+                selectedBeat.Genre = original.Genre;
+                selectedBeat.Price = original.Price;
+                selectedBeat.Bpm = original.Bpm;
+                selectedBeat.Key = original.Key;
+                selectedBeat.ImagePath = original.ImagePath;
+                selectedBeat.FileUrl = original.FileUrl;
+            }
+        }
+    }
+
+    private async Task DeleteSelectedBeat()
+    {
+        if (selectedBeat != null)
+        {
+            bool confirmed = await JS.InvokeAsync<bool>("confirm", $"Удалить бит \"{selectedBeat.Title}\"?");
+            if (confirmed)
+            {
+                await BeatService.DeleteBeatAsync(selectedBeat.Id);
+                uploadedBeats = await BeatService.GetBeatsByUserIdAsync(Session.CurrentUser!.Id);
+                CloseBeatModal();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
+    }
+}

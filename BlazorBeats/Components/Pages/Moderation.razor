@@ -1,0 +1,122 @@
+﻿@page "/moderation"
+@inject BeatService BeatService
+@inject BlazorBeats.Services.ProfileService ProfileService
+@using BlazorBeats.Components.Layout
+@layout AdminLayout
+
+@using BlazorBeats.Components.Data.Models
+@using BlazorBeats.Components.Data
+
+<style>
+    .moderation-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+
+    .mod-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+
+        .mod-card audio {
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+    .mod-actions {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+    }
+
+        .mod-actions button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+    .approve-btn {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .delete-btn {
+        background-color: #dc3545;
+        color: white;
+    }
+</style>
+
+<h2>Модерация контента</h2>
+
+@if (PendingBeats == null)
+{
+    <p>Загрузка битов...</p>
+}
+else if (PendingBeats.Count == 0)
+{
+    <p>Нет битов на модерации.</p>
+}
+else
+{
+    <div class="moderation-grid">
+        @foreach (var beat in PendingBeats)
+        {
+            <div class="mod-card">
+                <h3>@beat.Title</h3>
+                <p><strong>Жанр:</strong> @beat.Genre</p>
+                <p><strong>BPM:</strong> @beat.Bpm</p>
+
+                @if (Authors.TryGetValue(beat.UserId.ToString(), out var author))
+                {
+                    <p><strong>Автор:</strong> @author.Name</p>
+                }
+
+                <audio controls>
+                    <source src="@beat.FileUrl" type="audio/mpeg" />
+                </audio>
+
+                <div class="mod-actions">
+                    <button class="approve-btn" @onclick="() => ApproveBeat(beat)">Одобрить</button>
+                    <button class="delete-btn" @onclick="() => DeleteBeat(beat)">Удалить</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Beat> PendingBeats = new();
+    private Dictionary<string, Profile> Authors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        PendingBeats = await BeatService.GetBeatsByApprovalAsync(false);
+
+        foreach (var beat in PendingBeats)
+        {
+            var profile = await ProfileService.GetProfileByUserIdAsync(beat.UserId);
+            if (profile != null)
+            {
+                Authors[beat.UserId.ToString()] = profile;
+            }
+        }
+    }
+
+    private async Task ApproveBeat(Beat beat)
+    {
+        beat.IsApproved = true;
+        await BeatService.UpdateBeatAsync(beat);
+        PendingBeats.Remove(beat);
+    }
+
+    private async Task DeleteBeat(Beat beat)
+    {
+        await BeatService.DeleteBeatAsync(beat.Id);
+        PendingBeats.Remove(beat);
+    }
+}

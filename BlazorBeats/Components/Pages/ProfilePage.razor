@@ -1,0 +1,246 @@
+﻿@page "/profile"
+@using Models = BlazorBeats.Components.Data.Models
+@inject ProfileService ProfileService
+@inject UserSession UserSession
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@using BlazorBeats.Components.Layout
+
+
+
+
+
+
+<style>
+    .profile-container {
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 30px;
+        background-color: #fff;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        font-family: sans-serif;
+    }
+
+    .profile-title {
+        text-align: center;
+        font-size: 26px;
+        font-weight: bold;
+        margin-bottom: 24px;
+        color: #333;
+    }
+
+    .form-group {
+        margin-bottom: 18px;
+    }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #444;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+    .save-button, .action-button {
+        padding: 10px 20px;
+        margin-right: 10px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.2s ease-in-out;
+    }
+
+        .action-button:hover, .save-button:hover {
+            background-color: #0056b3;
+        }
+
+    .avatar-preview {
+        margin-top: 30px;
+        text-align: center;
+    }
+
+        .avatar-preview img {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            object-fit: cover;
+        }
+
+    .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        max-width: 400px;
+        width: 100%;
+    }
+
+    .loading-text {
+        text-align: center;
+        color: #777;
+        font-size: 16px;
+    }
+</style>
+
+<div class="profile-container">
+    <div class="profile-title">Профиль</div>
+
+    @if (profileModel == null)
+    {
+        <p class="loading-text">Загрузка профиля...</p>
+    }
+    else
+    {
+        <EditForm Model="profileModel" OnValidSubmit="SaveProfile">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-group">
+                <label>Имя:</label>
+                <InputText @bind-Value="profileModel.Name" />
+            </div>
+
+            <div class="form-group">
+                <label>О себе:</label>
+                <InputTextArea @bind-Value="profileModel.Bio" rows="3" />
+            </div>
+
+            <div class="form-group">
+                <label>Avatar:</label>
+                <InputFile OnChange="OnAvatarSelected" />
+            </div>
+
+            <button type="submit" class="save-button">Сохранить</button>
+        </EditForm>
+
+        <div class="avatar-preview">
+            <h4>Текущий аватар:</h4>
+            <img src="@profileModel.AvatarUrl" alt="Avatar" />
+        </div>
+
+        <div class="form-group" style="text-align:center; margin-top: 20px;">
+            <p>Баланс: <strong>$@profileModel.Balance.ToString("0.00")</strong></p>
+            <button class="action-button" @onclick="() => showDeposit = true">Пополнить баланс</button>
+            <button class="action-button" @onclick="() => showWithdraw = true">Вывод средств</button>
+        </div>
+    }
+</div>
+
+@if (showDeposit)
+{
+    <div class="modal-backdrop">
+        <div class="modal-content">
+            <h4>Пополнить баланс</h4>
+            <InputNumber @bind-Value="transactionAmount" class="form-group" />
+            <button class="action-button" @onclick="Deposit">Пополнить</button>
+            <button class="action-button" @onclick="() => showDeposit = false">Отмена</button>
+        </div>
+    </div>
+}
+
+@if (showWithdraw)
+{
+    <div class="modal-backdrop">
+        <div class="modal-content">
+            <h4>Вывести средства</h4>
+            <InputNumber @bind-Value="transactionAmount" class="form-group" />
+            <button class="action-button" @onclick="Withdraw">Вывести</button>
+            <button class="action-button" @onclick="() => showWithdraw = false">Отмена</button>
+        </div>
+    </div>
+}
+
+@code {
+    private Models.Profile? profileModel;
+    private bool showDeposit = false;
+    private bool showWithdraw = false;
+    private float transactionAmount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!UserSession.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        var userId = UserSession.CurrentUser!.Id;
+
+        profileModel = await ProfileService.GetProfileByUserIdAsync(userId)
+                       ?? new Models.Profile
+                           {
+                               UserId = userId,
+                               Name = "Новый пользователь",
+                               AvatarUrl = "/images/default-avatar.png",
+                               Bio = "",
+                               Balance = 0
+                           };
+    }
+
+    private async Task SaveProfile()
+    {
+        if (UserSession.IsAuthenticated && profileModel != null)
+        {
+            await ProfileService.SaveProfileAsync(profileModel);
+        }
+    }
+
+    private async Task OnAvatarSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        var fileName = $"{Guid.NewGuid()}_{file.Name}";
+        var filePath = Path.Combine("wwwroot/images", fileName);
+
+        using var stream = new FileStream(filePath, FileMode.Create);
+        await file.OpenReadStream().CopyToAsync(stream);
+
+        profileModel!.AvatarUrl = $"/images/{fileName}";
+    }
+
+    private async Task Deposit()
+    {
+        if (profileModel != null && transactionAmount > 0)
+        {
+            profileModel.Balance += transactionAmount;
+            await SaveProfile();
+            showDeposit = false;
+            transactionAmount = 0;
+        }
+    }
+
+    private async Task Withdraw()
+    {
+        if (profileModel != null && transactionAmount > 0 && profileModel.Balance >= transactionAmount)
+        {
+            profileModel.Balance -= transactionAmount;
+            await SaveProfile();
+            showWithdraw = false;
+            transactionAmount = 0;
+        }
+    }
+}

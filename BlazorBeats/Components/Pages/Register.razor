@@ -1,0 +1,137 @@
+﻿@page "/register"
+@using BlazorBeats.Services
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject UserSession Session
+@using BlazorBeats.Components.Layout
+@layout EmptyLayout
+
+<style>
+    .form-container {
+        max-width: 350px;
+        margin: 80px auto;
+        padding: 25px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-shadow: 0 2px 8px rgb(0 0 0 / 0.1);
+    }
+
+    h3 {
+        margin-bottom: 20px;
+        color: #34495e;
+        text-align: center;
+    }
+
+    input[type="email"], input[type="password"] {
+        width: 100%;
+        padding: 10px 12px;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        font-size: 15px;
+        box-sizing: border-box;
+    }
+
+    button[type="submit"] {
+        width: 100%;
+        background-color: #27ae60;
+        border: none;
+        color: white;
+        padding: 12px 0;
+        font-size: 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+        button[type="submit"]:hover {
+            background-color: #1e8449;
+        }
+
+    p.error-message {
+        color: #e74c3c;
+        font-weight: bold;
+        margin-top: 10px;
+        text-align: center;
+    }
+
+    .register-actions {
+        margin-top: 15px;
+        text-align: center;
+        font-size: 14px;
+        color: #34495e;
+    }
+
+    .login-link {
+        color: #2980b9;
+        cursor: pointer;
+        text-decoration: underline;
+        margin-left: 5px;
+    }
+
+        .login-link:hover {
+            color: #1c5980;
+        }
+</style>
+
+<div class="form-container">
+    <h3>Регистрация</h3>
+
+    <EditForm Model="@registerModel" OnValidSubmit="SubmitRegister">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <InputText @bind-Value="registerModel.Email" type="email" placeholder="Email" />
+        <InputText @bind-Value="registerModel.Password" type="password" placeholder="Пароль" />
+
+        <button type="submit">Зарегистрироваться</button>
+
+        <div class="register-actions">
+            <span>Есть аккаунт?</span>
+            <span class="login-link" @onclick="NavigateToLogin">Войти</span>
+        </div>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <p class="error-message">@error</p>
+    }
+</div>
+
+@code {
+    private RegisterModel registerModel = new();
+    private string? error;
+
+    private async Task SubmitRegister()
+    {
+        try
+        {
+            var success = await AuthService.RegisterAsync(registerModel.Email, registerModel.Password);
+            if (!success)
+            {
+                error = "Такой email уже существует.";
+                return;
+            }
+
+            var user = await AuthService.LoginAsync(registerModel.Email, registerModel.Password);
+            Session.CurrentUser = user;
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message + (ex.InnerException != null ? " | " + ex.InnerException.Message : "");
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        Nav.NavigateTo("/login");
+    }
+
+    public class RegisterModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}
